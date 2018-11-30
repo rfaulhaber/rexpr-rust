@@ -1,9 +1,13 @@
-use combine::*;
+use std::error::Error;
+use std::fmt;
+
+trait Evaluable {}
 
 enum Expr {
     Binary(Box<BinaryExpr>),
     Unary(Box<UnaryExpr>),
-    Number(f64),
+    Float(f64),
+    Integer(i64),
 }
 
 struct BinaryExpr {
@@ -15,6 +19,34 @@ struct BinaryExpr {
 struct UnaryExpr {
     l: Expr,
     op: Operation,
+}
+
+#[derive(Debug)]
+struct ParseError {
+    details: String,
+}
+
+impl fmt::Display for ParseError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.details)
+    }
+}
+
+impl Error for ParseError {
+    fn description(&self) -> &str {
+        &self.details
+    }
+}
+
+fn expr_from_string(s: String) -> Result<Expr, ParseError> {
+    let tokens: Vec<&str> = s.split_whitespace().collect();
+    let mut temp: Vec<String> = Vec::new();
+
+    for token in tokens {
+        if let Some(op) = str_to_op(String::from(token)) {}
+    }
+
+    return Result::Ok(Expr::Integer(1));
 }
 
 enum Operation {
