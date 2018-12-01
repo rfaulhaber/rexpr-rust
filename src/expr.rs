@@ -1,55 +1,116 @@
-use std::error::Error;
+use std::error;
 use std::fmt;
 
-trait Evaluable {}
-
-enum Expr {
-    Binary(Box<BinaryExpr>),
-    Unary(Box<UnaryExpr>),
-    Float(f64),
-    Integer(i64),
+enum NodeVal {
+    Number(f64),
+    Node(Box<Node>),
+    None,
 }
 
-struct BinaryExpr {
-    l: Expr,
-    r: Expr,
-    op: Operation,
+struct Node {
+    left: NodeVal,
+    right: NodeVal,
+    op: Operator,
 }
 
-struct UnaryExpr {
-    l: Expr,
-    op: Operation,
-}
-
-#[derive(Debug)]
-struct ParseError {
+#[derive(Debug, Clone)]
+struct EvalError {
     details: String,
 }
 
-impl fmt::Display for ParseError {
+impl fmt::Display for EvalError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.details)
+        write!(f, "invalid first item to double")
     }
 }
 
-impl Error for ParseError {
+// This is important for other errors to wrap this one.
+impl error::Error for EvalError{
     fn description(&self) -> &str {
-        &self.details
+        "invalid first item to double"
+    }
+
+    fn cause(&self) -> Option<&error::Error> {
+        // Generic error, underlying cause isn't tracked.
+        None
     }
 }
 
-fn expr_from_string(s: String) -> Result<Expr, ParseError> {
-    let tokens: Vec<&str> = s.split_whitespace().collect();
-    let mut temp: Vec<String> = Vec::new();
-
-    for token in tokens {
-        if let Some(op) = str_to_op(String::from(token)) {}
+impl NodeVal {
+    fn evaluate(&self) -> Result<f64, EvalError> {
+        return match self {
+            NodeVal::Number(f) => Result::Ok(*f),
+            NodeVal::Node(n) => n.evaluate(),
+            NodeVal::None => Result::Err(EvalError {details: String::from("cannot be evaluated")} )
+        }
     }
-
-    return Result::Ok(Expr::Integer(1));
 }
 
-enum Operation {
+impl Node {
+    fn evaluate(&self) -> Result<f64, EvalError> {
+        if let NodeVal::None = self.right {
+            return self.left.evaluate();
+        } else if let NodeVal::None = self.left {
+            return self.right.evaluate();
+        } else {
+            let left = match self.left.evaluate() {
+                Result::Ok(f) => f,
+                Result::Err(err) => return Result::Err(err),
+            };
+
+            let right = match self.right.evaluate() {
+                Result::Ok(f) => f,
+                Result::Err(err) => return Result::Err(err),
+            };
+
+            return match self.op {
+                Operator::ADD => Result::Ok(left + right),
+                Operator::SUB => Result::Ok(left - right),
+                Operator::MULT => Result::Ok(left * right),
+                Operator::DIV => Result::Ok(left / right),
+                Operator::IDIV => Result::Ok((left / right).floor()),
+                Operator::EXP => Result::Ok(left.powf(right)),
+                Operator::FACT => Result::Ok(fact_from_float(left))
+            }
+        }
+    }
+
+    fn reparent(&self, right: &Node, op: Operator) -> &Node {
+        return Node{
+            left: NodeVal::Node(Box::new(*self)),
+            right: NodeVal::Node(Box::new(*right)),
+            op: op
+        }.to_owned();
+    }
+
+    // fn parse(s: String) -> Node {
+    //     let mut left: String;
+    //     let mut right: String;
+
+    //     let stack: Vec<String> = Vec::new();
+    //     let ret = &Node { };
+
+    //     for token in s.split_whitespace() {
+    //         if token.parse::f64().is_ok() {
+    //             stack.push(token);
+    //         } else if (str_to_op(token).is_some()) {
+
+    //         }
+    //     }
+
+    //     return Node {left: NodeVal::None, right: NodeVal:: None, op: Operator::ADD};
+    // }
+}
+
+fn fact_from_float(f: f64) -> f64 {
+    if f <= 1.0 {
+        f
+    } else {
+        f * fact_from_float(f - 1.0)
+    }
+}
+
+enum Operator {
     ADD,
     SUB,
     MULT,
@@ -59,27 +120,44 @@ enum Operation {
     FACT,
 }
 
-fn str_to_op(s: String) -> Option<Operation> {
+fn str_to_op(s: String) -> Option<Operator> {
     return match s.as_ref() {
-        "+" => Some(Operation::ADD),
-        "-" => Some(Operation::SUB),
-        "*" => Some(Operation::MULT),
-        "/" => Some(Operation::DIV),
-        "//" => Some(Operation::IDIV),
-        "^" => Some(Operation::EXP),
-        "!" => Some(Operation::FACT),
+        "+" => Some(Operator::ADD),
+        "-" => Some(Operator::SUB),
+        "*" => Some(Operator::MULT),
+        "/" => Some(Operator::DIV),
+        "//" => Some(Operator::IDIV),
+        "^" => Some(Operator::EXP),
+        "!" => Some(Operator::FACT),
         _ => None,
     };
 }
 
-fn op_to_str(o: Operation) -> Option<String> {
+fn op_to_str(o: Operator) -> Option<String> {
     return match o {
-        Operation::ADD => Some(String::from("+")),
-        Operation::SUB => Some(String::from("-")),
-        Operation::MULT => Some(String::from("*")),
-        Operation::DIV => Some(String::from("/")),
-        Operation::IDIV => Some(String::from("//")),
-        Operation::EXP => Some(String::from("^")),
-        Operation::FACT => Some(String::from("!")),
+        Operator::ADD => Some(String::from("+")),
+        Operator::SUB => Some(String::from("-")),
+        Operator::MULT => Some(String::from("*")),
+        Operator::DIV => Some(String::from("/")),
+        Operator::IDIV => Some(String::from("//")),
+        Operator::EXP => Some(String::from("^")),
+        Operator::FACT => Some(String::from("!")),
     };
+}
+
+mod tests {
+    use super::*;
+
+    #[test]
+    fn node_one_level_evaluates() {
+        let n = Node {
+            left: NodeVal::Number(5.0),
+            right: NodeVal::Number(1.0),
+            op: Operator::ADD
+        };
+
+        let result = n.evaluate().unwrap();
+
+        assert_eq!(result, 6.0);
+    }
 }
